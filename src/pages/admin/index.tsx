@@ -16,6 +16,17 @@ import { toast } from 'sonner';
 const AdminPage = () => {
   const [menus, setMenus] = useState<IMenu[]>([]);
   const [createDialog, setCreateDialog] = useState(false);
+  const [selectedMenu, setSelectedMenu] = useState<{
+    menu: IMenu;
+    action: 'edit' | 'delete';
+  } | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    category: '',
+    price: '',
+    image: '',
+  });
 
   useEffect(() => {
     const fetchMenus = async () => {
@@ -26,7 +37,7 @@ const AdminPage = () => {
     };
 
     fetchMenus();
-  }, [supabase]);
+  }, []);
 
   const handleAddMenu = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -46,6 +57,77 @@ const AdminPage = () => {
     } catch (error) {
       console.error('error:', error);
     }
+  };
+
+  const handleUpdateMenu = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+
+    try {
+      const { data, error } = await supabase.from('menus').update(Object.fromEntries(formData)).eq('id', selectedMenu?.menu.id).select();
+
+      if (error) console.log('error:', error);
+      else {
+        if (data) {
+          setMenus((prev) => prev.map((menu) => (menu.id === selectedMenu?.menu.id ? data[0] : menu)));
+        }
+        toast('Menu updated successfully!');
+        setSelectedMenu(null);
+      }
+    } catch (error) {
+      console.error('error:', error);
+    }
+  };
+
+  const handleDeleteMenu = async () => {
+    try {
+      const { data, error } = await supabase.from('menus').delete().eq('id', selectedMenu?.menu.id);
+
+      if (error) console.log('error:', error);
+      else {
+        setMenus((prev) => prev.filter((menu) => menu.id !== selectedMenu?.menu.id));
+        toast('Menu deleted successfully!');
+        setSelectedMenu(null);
+      }
+    } catch (error) {
+      console.error('error:', error);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleSelectChange = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      category: value,
+    }));
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      description: '',
+      category: '',
+      price: '',
+      image: '',
+    });
+  };
+
+  const openEditDialog = (menu: IMenu) => {
+    setSelectedMenu({ menu, action: 'edit' });
+    setFormData({
+      name: menu.name,
+      description: menu.description,
+      category: menu.category,
+      price: menu.price.toString(),
+      image: menu.image,
+    });
   };
 
   return (
@@ -130,7 +212,7 @@ const AdminPage = () => {
                   <Image width={50} height={50} src={menu.image} alt={menu.name} className="aspect-square object-cover rounded-lg" />
                   {menu.name}
                 </TableCell>
-                <TableCell>{menu.description.split(' ').slice(0.5).join(' ') + '...'}</TableCell>
+                <TableCell>{menu.description.split(' ').slice(0, 5).join(' ') + '...'}</TableCell>
                 <TableCell>{menu.category}</TableCell>
                 <TableCell>${menu.price},00</TableCell>
                 <TableCell>
@@ -142,8 +224,10 @@ const AdminPage = () => {
                       <DropdownMenuLabel className="font-bold">Action</DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <DropdownMenuGroup>
-                        <DropdownMenuItem>Update</DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-400">Delete</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openEditDialog(menu)}>Update</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setSelectedMenu({ menu, action: 'delete' })} className="text-red-400">
+                          Delete
+                        </DropdownMenuItem>
                       </DropdownMenuGroup>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -153,6 +237,99 @@ const AdminPage = () => {
           </TableBody>
         </Table>
       </div>
+
+      {/* Update Dialog */}
+      <Dialog
+        open={selectedMenu !== null && selectedMenu.action === 'edit'}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedMenu(null);
+            resetForm();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={handleUpdateMenu} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Update Menu</DialogTitle>
+              <DialogDescription>Update the menu information below.</DialogDescription>
+            </DialogHeader>
+            <div className="grid w-full gap-4">
+              <div className="grid w-full gap-1.5">
+                <Label htmlFor="edit-name">Name</Label>
+                <Input id="edit-name" name="name" value={formData.name} onChange={handleInputChange} placeholder="Insert Name" required />
+              </div>
+              <div className="grid w-full gap-1.5">
+                <Label htmlFor="edit-price">Price</Label>
+                <Input id="edit-price" name="price" value={formData.price} onChange={handleInputChange} placeholder="Insert Price" required />
+              </div>
+              <div className="grid w-full gap-1.5">
+                <Label htmlFor="edit-image">Image</Label>
+                <Input id="edit-image" name="image" value={formData.image} onChange={handleInputChange} placeholder="Insert Image" required />
+              </div>
+              <div className="grid w-full gap-1.5">
+                <Label htmlFor="edit-category">Category</Label>
+                <Select name="category" value={formData.category} onValueChange={handleSelectChange} required>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Category</SelectLabel>
+                      <SelectItem value="Coffee">Coffe</SelectItem>
+                      <SelectItem value="Non Coffee">Non Coffe</SelectItem>
+                      <SelectItem value="Pastries">Pastries</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid w-full gap-1.5">
+                <Label htmlFor="edit-description">Description</Label>
+                <Textarea id="edit-description" name="description" value={formData.description} onChange={handleInputChange} placeholder="Insert Description" className="resize-none h-32" required />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <DialogClose>
+                <Button variant="secondary" className="cursor-pointer">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit" className="cursor-pointer">
+                Update
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Dialog */}
+      <Dialog
+        open={selectedMenu !== null && selectedMenu.action === 'delete'}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedMenu(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Menu</DialogTitle>
+            <DialogDescription>Are you sure want to delete {selectedMenu?.menu.name}</DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <DialogClose>
+              <Button variant="secondary" className="cursor-pointer">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button onClick={handleDeleteMenu} variant="destructive" className="cursor-pointer">
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
